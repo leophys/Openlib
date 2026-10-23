@@ -41,6 +41,7 @@ dependencies:
   # pdfx: ^2.4.0
 
   dio: ^5.4.0
+  socks5_proxy: ^1.0.6
   html: ^0.15.4
 
   sqflite: ^2.3.0

@@ -5,7 +5,10 @@ import 'dart:io';
 import 'package:sqflite/sqflite.dart';
 
 // Project imports:
+import 'package:openlib/services/annas_archieve.dart' show AnnasArchieve;
 import 'package:openlib/services/files.dart';
+import 'package:openlib/services/proxy.dart'
+    show defaultProxyHost, defaultProxyPort;
 
 class MyBook {
   final String id;
@@ -114,6 +117,14 @@ class MyLibraryDb {
             "INSERT OR IGNORE INTO preferences (name, value) VALUES ('openEpubwithExternalApp', 0)");
         await db.execute(
             "INSERT OR IGNORE INTO preferences (name, value) VALUES ('bookStorageDirectory', '$bookStorageDefaultDirectory')");
+        await db.execute(
+            "INSERT OR IGNORE INTO preferences (name, value) VALUES ('archiveBaseUrl', '${AnnasArchieve.defaultBaseUrl}')");
+        await db.execute(
+            "INSERT OR IGNORE INTO preferences (name, value) VALUES ('useProxy', 0)");
+        await db.execute(
+            "INSERT OR IGNORE INTO preferences (name, value) VALUES ('proxyHost', '$defaultProxyHost')");
+        await db.execute(
+            "INSERT OR IGNORE INTO preferences (name, value) VALUES ('proxyPort', '$defaultProxyPort')");
       },
     );
   }
