@@ -7,6 +7,9 @@ import 'package:html/parser.dart' show parse;
 import 'package:html/dom.dart' as dom;
 import 'dart:convert';
 
+// Project imports:
+import 'package:openlib/services/proxy.dart';
+
 // ====================================================================
 // DATA MODELS
 // ====================================================================
@@ -53,9 +56,32 @@ class BookInfoData extends BookData {
 // ====================================================================
 
 class AnnasArchieve {
-  static const String baseUrl = "https://annas-archive.se";
+  static const String defaultBaseUrl = "https://annas-archive.se";
+
+  /// Base URL of the archive mirror. Defaults to [defaultBaseUrl] and can be
+  /// overridden from the settings page (e.g. when annas-archive.se is blocked
+  /// and another mirror is used).
+  final String baseUrl;
+
+  /// Optional SOCKS5 proxy (e.g. Orbot on 127.0.0.1:9050) used for all
+  /// requests made by this service.
+  final AppProxy proxy;
 
   final Dio dio = Dio();
+
+  AnnasArchieve({String? baseUrl, AppProxy? proxy})
+      : baseUrl = _normalizeBaseUrl(baseUrl),
+        proxy = proxy ?? AppProxy.disabled {
+    applyProxy(dio, this.proxy);
+  }
+
+  static String _normalizeBaseUrl(String? baseUrl) {
+    final trimmed = baseUrl?.trim() ?? '';
+    if (trimmed.isEmpty) return defaultBaseUrl;
+    return trimmed.endsWith('/')
+        ? trimmed.substring(0, trimmed.length - 1)
+        : trimmed;
+  }
 
   Map<String, dynamic> defaultDioHeaders = {
     "user-agent":
@@ -113,7 +139,7 @@ class AnnasArchieve {
       }
 
       final String title = mainLinkElement.text.trim();
-      final String link = baseUrl + mainLinkElement.attributes['href']!;
+      final String link = '$baseUrl${mainLinkElement.attributes['href']!}';
       final String md5 = getMd5(mainLinkElement.attributes['href']!);
       final String? thumbnail = thumbnailElement?.attributes['src'];
 
@@ -172,7 +198,7 @@ class AnnasArchieve {
     String? mirror;
     final slowDownloadLinks = main.querySelectorAll('ul.list-inside a[href*="/slow_download/"]');
     if (slowDownloadLinks.isNotEmpty && slowDownloadLinks.first.attributes['href'] != null) {
-        mirror = baseUrl + slowDownloadLinks.first.attributes['href']!;
+        mirror = '$baseUrl${slowDownloadLinks.first.attributes['href']!}';
     }
     // --------------------------------
 

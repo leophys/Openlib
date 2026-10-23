@@ -7,6 +7,7 @@ import 'package:dio/dio.dart';
 
 // Project imports:
 import 'package:openlib/services/database.dart' show MyLibraryDb;
+import 'package:openlib/services/proxy.dart';
 
 MyLibraryDb dataBase = MyLibraryDb.instance;
 
@@ -16,16 +17,44 @@ Future<String> _getFilePath(String fileName) async {
   return '$bookStorageDirectory/$fileName';
 }
 
-List<String> _reorderMirrors(List<String> mirrors) {
+/// Hosts that serve the book pages themselves (not download mirrors). Mirrors
+/// pointing at these hosts are dropped because the download would just fetch
+/// the HTML page instead of the book file.
+Future<List<String>> _excludedMirrorPrefixes() async {
+  final prefixes = <String>[
+    'https://annas-archive.se',
+    'https://1lib.sk',
+  ];
+  try {
+    final baseUrl = (await dataBase.getPreference('archiveBaseUrl'))
+        ?.toString()
+        .trim();
+    if (baseUrl != null &&
+        baseUrl.isNotEmpty &&
+        !prefixes.contains(baseUrl)) {
+      prefixes.add(baseUrl.endsWith('/')
+          ? baseUrl.substring(0, baseUrl.length - 1)
+          : baseUrl);
+    }
+  } catch (_) {
+    // Preference not initialised yet; only the built-in hosts are excluded.
+  }
+  return prefixes;
+}
+
+Future<List<String>> _reorderMirrors(List<String> mirrors) async {
   List<String> ipfsMirrors = [];
   List<String> httpsMirrors = [];
+
+  final excludedPrefixes = await _excludedMirrorPrefixes();
 
   for (var element in mirrors) {
     if (element.contains('ipfs') == true) {
       ipfsMirrors.add(element);
     } else {
-      if (element.startsWith('https://annas-archive.se') != true &&
-          element.startsWith('https://1lib.sk') != true) {
+      final bool isExcluded = excludedPrefixes
+          .any((prefix) => element.startsWith(prefix) == true);
+      if (!isExcluded) {
         httpsMirrors.add(element);
       }
     }
@@ -33,8 +62,9 @@ List<String> _reorderMirrors(List<String> mirrors) {
   return [...ipfsMirrors, ...httpsMirrors];
 }
 
-Future<String?> _getAliveMirror(List<String> mirrors) async {
+Future<String?> _getAliveMirror(List<String> mirrors, AppProxy proxy) async {
   Dio dio = Dio();
+  applyProxy(dio, proxy);
   const timeOut = 15;
   if (mirrors.length == 1) {
     await Future.delayed(const Duration(seconds: 2));
@@ -66,11 +96,13 @@ Future<void> downloadFile(
     onDownlaodFailed('No mirrors available!');
   } else {
     Dio dio = Dio();
+    final AppProxy proxy = await loadProxyFromPreferences();
+    applyProxy(dio, proxy);
 
     String path = await _getFilePath('$md5.$format');
-    List<String> orderedMirrors = _reorderMirrors(mirrors);
+    List<String> orderedMirrors = await _reorderMirrors(mirrors);
 
-    String? workingMirror = await _getAliveMirror(orderedMirrors);
+    String? workingMirror = await _getAliveMirror(orderedMirrors, proxy);
 
     // print(workingMirror);
     // print(path);

@@ -15,6 +15,7 @@ import 'package:openlib/services/database.dart';
 import 'package:openlib/services/files.dart';
 import 'package:openlib/services/open_library.dart';
 import 'package:openlib/services/goodreads.dart';
+import 'package:openlib/services/proxy.dart';
 // Assuming OpenLibrary, Goodreads, PenguinRandomHouse, BookDigits, and SubCategoriesTypeList are defined
 // or are simple placeholder services/models that work as intended.
 
@@ -95,6 +96,25 @@ final pdfCurrentPage = StateProvider.autoDispose<int>((ref) => 0);
 final totalPdfPage = StateProvider.autoDispose<int>((ref) => 0);
 final openPdfWithExternalAppProvider = StateProvider<bool>((ref) => false);
 final openEpubWithExternalAppProvider = StateProvider<bool>((ref) => false);
+
+// Archive and Proxy Settings
+final archiveBaseUrlProvider = StateProvider<String>(
+    (ref) => AnnasArchieve.defaultBaseUrl);
+final useProxyProvider = StateProvider<bool>((ref) => false);
+final proxyHostProvider = StateProvider<String>((ref) => defaultProxyHost);
+final proxyPortProvider = StateProvider<int>((ref) => defaultProxyPort);
+
+/// The currently configured SOCKS5 proxy, rebuilt whenever one of its parts
+/// changes. A disabled or incomplete configuration yields a disabled proxy.
+final appProxyProvider = Provider<AppProxy>((ref) {
+  final enabled = ref.watch(useProxyProvider);
+  final host = ref.watch(proxyHostProvider).trim();
+  final port = ref.watch(proxyPortProvider);
+  if (!enabled || host.isEmpty || port <= 0 || port > 65535) {
+    return AppProxy.disabled;
+  }
+  return AppProxy(host: host, port: port);
+});
 
 // ====================================================================
 // DERIVED (COMPUTED) STATE PROVIDERS
@@ -177,7 +197,10 @@ final searchProvider = FutureProvider.family
     .autoDispose<List<BookData>, String>((ref, searchQuery) async {
   if (searchQuery.isEmpty) return []; // Return empty list if search query is empty
 
-  final AnnasArchieve annasArchieve = AnnasArchieve();
+  final AnnasArchieve annasArchieve = AnnasArchieve(
+    baseUrl: ref.watch(archiveBaseUrlProvider),
+    proxy: ref.watch(appProxyProvider),
+  );
   List<BookData> data = await annasArchieve.searchBooks(
       searchQuery: searchQuery,
       content: ref.watch(getTypeValue),
@@ -190,7 +213,10 @@ final searchProvider = FutureProvider.family
 // Provider for Book Info Details
 final bookInfoProvider =
     FutureProvider.family<BookInfoData, String>((ref, url) async {
-  final AnnasArchieve annasArchieve = AnnasArchieve();
+  final AnnasArchieve annasArchieve = AnnasArchieve(
+    baseUrl: ref.watch(archiveBaseUrlProvider),
+    proxy: ref.watch(appProxyProvider),
+  );
   BookInfoData data = await annasArchieve.bookInfo(url: url);
   return data;
 });

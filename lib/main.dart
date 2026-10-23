@@ -13,7 +13,9 @@ import 'package:openlib/ui/home_page.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 // Project imports:
+import 'package:openlib/services/annas_archieve.dart' show AnnasArchieve;
 import 'package:openlib/services/database.dart' show MyLibraryDb;
+import 'package:openlib/services/proxy.dart';
 import 'package:openlib/ui/mylibrary_page.dart';
 import 'package:openlib/ui/search_page.dart';
 import 'package:openlib/ui/settings_page.dart';
@@ -28,7 +30,11 @@ import 'package:openlib/state/state.dart'
         openPdfWithExternalAppProvider,
         openEpubWithExternalAppProvider,
         userAgentProvider,
-        cookieProvider;
+        cookieProvider,
+        archiveBaseUrlProvider,
+        useProxyProvider,
+        proxyHostProvider,
+        proxyPortProvider;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -55,6 +61,25 @@ void main() async {
   String browserUserAgent = await dataBase.getBrowserOptions('userAgent');
   String browserCookie = await dataBase.getBrowserOptions('cookie');
 
+  String archiveBaseUrl =
+      (await dataBase.getPreference('archiveBaseUrl'))?.toString().trim() ??
+          '';
+  if (archiveBaseUrl.isEmpty) {
+    archiveBaseUrl = AnnasArchieve.defaultBaseUrl;
+  }
+
+  bool useProxy = await dataBase.getPreference('useProxy') == 1;
+  String proxyHost =
+      (await dataBase.getPreference('proxyHost'))?.toString().trim() ?? '';
+  if (proxyHost.isEmpty) proxyHost = defaultProxyHost;
+  int proxyPort =
+      int.tryParse((await dataBase.getPreference('proxyPort'))?.toString() ?? '') ??
+          defaultProxyPort;
+
+  final AppProxy proxy = useProxy && proxyHost.isNotEmpty && proxyPort > 0
+      ? AppProxy(host: proxyHost, port: proxyPort)
+      : AppProxy.disabled;
+
   if (Platform.isAndroid) {
     SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(
         systemNavigationBarColor:
@@ -73,10 +98,17 @@ void main() async {
             .overrideWith((ref) => openEpubwithExternalapp),
         userAgentProvider.overrideWith((ref) => browserUserAgent),
         cookieProvider.overrideWith((ref) => browserCookie),
+        archiveBaseUrlProvider.overrideWith((ref) => archiveBaseUrl),
+        useProxyProvider.overrideWith((ref) => proxy.enabled),
+        proxyHostProvider.overrideWith((ref) => proxy.host),
+        proxyPortProvider.overrideWith((ref) => proxy.port),
       ],
       child: const MyApp(),
     ),
   );
+
+  // Route the Android WebView (captcha page) through the SOCKS5 proxy too.
+  await applyWebViewProxy(proxy);
 }
 
 class MyApp extends ConsumerWidget {
